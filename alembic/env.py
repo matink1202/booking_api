@@ -1,10 +1,10 @@
 import asyncio
-import os
 from logging.config import fileConfig
-from pathlib import Path
 
 from alembic import context
-from dotenv import load_dotenv
+from app.core.config import settings
+from app.db.base import Base
+from app.models import appointment, provider, service, user
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -12,18 +12,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-ENV_PATH = BASE_DIR / ".env"
-
-load_dotenv(ENV_PATH)
-
-DATABASE_URL = os.getenv("SQLACHEMY_DATABASE_URL")
 config = context.config
 
-if DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-else:
-    raise ValueError("DATABASE_URL is not set in the environment variables")
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -35,9 +26,6 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 
-from app.core.config import settings
-from app.db.base import Base
-from app.models import *  # همه‌ی مدل‌ها ایمپورت بشن
 
 target_metadata = Base.metadata
 
