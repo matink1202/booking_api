@@ -2,11 +2,12 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID, uuid4
 
-from app.db.base import Base
 from sqlalchemy import DateTime, String, func
 from sqlalchemy import Enum as enum
 from sqlalchemy.dialects.postgresql import UUID as postuuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
 
 
 class UserRole(str, Enum):
@@ -16,6 +17,12 @@ class UserRole(str, Enum):
 
 
 class User(Base):
+    """_summary_
+
+    Args:
+        Base (_type_): full_name: str, email: str, hashed_password: str
+    """
+    
     __tablename__ = "users"
 
     id: Mapped[UUID] =mapped_column(
