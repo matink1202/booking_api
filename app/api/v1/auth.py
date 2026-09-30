@@ -7,7 +7,7 @@ from app.schemas.token import TokenSchema
 from app.schemas.user import UserCreateSchema, UserLoginSchema, UserOutSchema
 from app.services import auth_service
 
-router = APIRouter(tags=["auth"], prefix="/auth")
+router = APIRouter(tags=["Auth"], prefix="/auth")
 
 
 @router.post("/register", response_model=UserOutSchema, status_code=status.HTTP_201_CREATED)
