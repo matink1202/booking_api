@@ -13,7 +13,7 @@ from app.schemas.provider import (
 )
 from app.services import provider_service
 
-router = APIRouter(tags=["Providers"], prefix="/v1/providers")
+router = APIRouter(tags=["Providers"], prefix="/providers")
 
 
 @router.post("/", response_model=ProviderOutSchema, status_code=status.HTTP_201_CREATED)
