@@ -2,11 +2,12 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID, uuid4
 
-from app.db.base import Base
 from sqlalchemy import DateTime, ForeignKey, func
 from sqlalchemy import Enum as enum
 from sqlalchemy.dialects.postgresql import UUID as postuuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
 
 
 class AppointmentStatus(str, Enum):
@@ -16,6 +17,12 @@ class AppointmentStatus(str, Enum):
     COMPLETED = "completed"
 
 class Appointment(Base):
+    """_summary_
+
+    Args:
+        Base (_type_): customer_id: uuid, provider_id:uuid, service_id: uuid, start_time: datatime, end_time: datetime, status: appointmentstatus
+    """    
+    
     __tablename__ = "appointments"
     
     id: Mapped[UUID] = mapped_column(postuuid(as_uuid=True), primary_key=True, default=uuid4)
