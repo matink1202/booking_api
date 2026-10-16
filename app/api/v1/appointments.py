@@ -9,11 +9,12 @@ from app.models.user import User as UserModel
 from app.schemas.appointment import (
     AppointmentCreateSchema,
     AppointmentOutSchema,
+    AppointmentRescheduleSchema,
     AppointmentStatusUpdateSchema,
 )
 from app.services import booking_services
 
-router = APIRouter(tags=["appointments"], prefix="/appointment")
+router = APIRouter(tags=["appointments"], prefix="/appointments")
 
 
 @router.post(
@@ -53,7 +54,7 @@ async def get_appointments(
     status_code=status.HTTP_200_OK,
 )
 async def get_appointment_detail(
-    appointment_id: UUID = Path(...),  # noqa: B008
+    appointment_id: UUID = Path(..., description="appointment id"),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
     current_user: UserModel = Depends(get_current_user),  # noqa: B008
 ):
@@ -71,7 +72,7 @@ async def get_appointment_detail(
 )
 async def update_appointment(
     request: AppointmentStatusUpdateSchema,
-    appointment_id: UUID = Path(..., description="service id"),  # noqa: B008
+    appointment_id: UUID = Path(..., description="appointment id"),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
     current_user: UserModel = Depends(get_current_user),  # noqa: B008
 ):
@@ -79,6 +80,18 @@ async def update_appointment(
         db, current_user, appointment_id, request
     )
     return appointment
+
+
+@router.patch("/{appointment_id}/reschedule", response_model=AppointmentOutSchema)
+async def reschedule_appointment(
+    request: AppointmentRescheduleSchema,
+    appointment_id: UUID = Path(..., description="appointment id"),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: UserModel = Depends(get_current_user),  # noqa: B008
+):
+    return await booking_services.reschedule_appointment(
+        db, current_user, appointment_id, request
+    )
 
 
 @router.post(

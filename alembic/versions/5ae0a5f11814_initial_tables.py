@@ -88,3 +88,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     # ### end Alembic commands ###
+    
+    # enum type ها با drop_table پاک نمی‌شوند؛ باید جداگانه حذف شوند
+    op.execute("DROP TYPE IF EXISTS appointmentstatus")
+    op.execute("DROP TYPE IF EXISTS userrole")
