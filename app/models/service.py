@@ -24,4 +24,4 @@ class Service(Base):
     price: Mapped[Decimal] = mapped_column(Numeric(10,2), nullable=False)
     
     provider: Mapped["Provider"] =relationship(back_populates="services")
-    appointments: Mapped["Appointment"] = relationship(back_populates="service")
+    appointments: Mapped[list["Appointment"]] = relationship(back_populates="service")
