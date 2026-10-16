@@ -1,15 +1,22 @@
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.models.appointment import Appointment as AppointmentModel
 from app.models.appointment import AppointmentStatus
+from app.models.availability import (
+    ProviderAvailability as ProviderAvailabilityModel,
+)
 from app.models.provider import Provider as ProviderModel
 from app.models.service import Service as ServiceModel
 from app.models.user import UserRole
+
+LOCAL_TZ = ZoneInfo(settings.TIMEZONE)
 
 
 async def _has_conflict(
@@ -34,13 +41,36 @@ async def _has_conflict(
     return result.scalars().first() is not None
 
 
+async def _is_within_availability(
+    db: AsyncSession, provider_id, start_time: datetime, end_time: datetime
+) -> bool:
+    local_start = start_time.astimezone(LOCAL_TZ)
+    local_end = end_time.astimezone(LOCAL_TZ)
+    
+    if local_start.date() != local_end.date():
+        return False 
+
+    day_of_week = local_start.weekday()
+
+    query = select(ProviderAvailabilityModel).where(
+        and_(
+            ProviderAvailabilityModel.provider_id == provider_id,
+            ProviderAvailabilityModel.day_of_week == day_of_week,
+            ProviderAvailabilityModel.start_time <= local_start.time(),
+            ProviderAvailabilityModel.end_time >= local_end.time(),
+        )
+    )
+    result = await db.execute(query)
+    return result.scalars().first() is not None
+
+
 async def create_appointment(db, current_user, data) -> AppointmentModel:
 
     query = select(ServiceModel).where(ServiceModel.id == data.service_id)
     result = await db.execute(query)
     service = result.scalar_one_or_none()
 
-    if service == None:
+    if service is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="appointment not exists"
         )
@@ -57,6 +87,14 @@ async def create_appointment(db, current_user, data) -> AppointmentModel:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="this time slot is not available",
+        )
+
+    if not await _is_within_availability(
+        db, data.provider_id, data.start_time, end_time
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this time is outside the provider's available hours",
         )
 
     appointment_obj = AppointmentModel(
@@ -80,7 +118,7 @@ async def list_appointments(db, current_user, skip, limit) -> list[AppointmentMo
         query = (
             select(AppointmentModel)
             .where(AppointmentModel.customer_id == current_user.id)
-            .order_by(AppointmentModel.id)
+            .order_by(AppointmentModel.start_time)
             .limit(limit)
             .offset(skip)
         )
@@ -96,7 +134,7 @@ async def list_appointments(db, current_user, skip, limit) -> list[AppointmentMo
     else:
         query = (
             select(AppointmentModel)
-            .order_by(ProviderModel.id)
+            .order_by(AppointmentModel.id)
             .limit(limit)
             .offset(skip)
         )
@@ -173,7 +211,7 @@ async def update_appointment_status(
 
 
 async def cancel_appointment(
-    db, current_user, appointment_id, data
+    db, current_user, appointment_id
 ) -> AppointmentModel:
 
     query = (
@@ -185,7 +223,9 @@ async def cancel_appointment(
     appointment = result.scalar_one_or_none()
 
     if appointment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="appointment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="appointment not found"
+        )
 
     is_owner = (
         appointment.customer_id == current_user.id
@@ -193,10 +233,73 @@ async def cancel_appointment(
     )
     if not (is_owner or current_user.role == UserRole.ADMIN):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="you don't have access to this appointment"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="you don't have access to this appointment",
         )
 
     appointment.status = AppointmentStatus.CANCELLED
     await db.commit()
     await db.refresh(appointment)
+    return appointment
+
+
+async def reschedule_appointment(
+    db, current_user, appointment_id, data
+) -> AppointmentModel:
+    query = (
+        select(AppointmentModel)
+        .options(
+            selectinload(AppointmentModel.provider),
+            selectinload(AppointmentModel.service),
+        )
+        .where(AppointmentModel.id == appointment_id)
+    )
+    result = await db.execute(query)
+    appointment = result.scalar_one_or_none()
+
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="appointment not found"
+        )
+
+    is_owner = (
+        appointment.provider.user_id == current_user.id
+        or appointment.customer_id == current_user.id
+    )
+    if not (is_owner or current_user.role == UserRole.ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="you don't have access to this appointment",
+        )
+
+    duration_minutes = appointment.service.duration_minutes
+
+    end_time = data.start_time + timedelta(minutes=duration_minutes)
+
+    if await _has_conflict(
+        db,
+        appointment.provider_id,
+        data.start_time,
+        end_time,
+        exclude_appointment_id=appointment_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this time slot is not available",
+        )
+
+    if not await _is_within_availability(
+        db, appointment.provider_id, data.start_time, end_time
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this time is outside the provider's available hours",
+        )
+
+    appointment.start_time = data.start_time
+    appointment.end_time = end_time
+
+    await db.commit()
+    await db.refresh(appointment)
+
     return appointment
